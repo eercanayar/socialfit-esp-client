@@ -15,24 +15,31 @@
 
 #include <ArduinoJson.h>
 
+#include <SoftwareSerial.h>
+
+SoftwareSerial TO_SERIAL(5,4); // RX, TX
+
 ESP8266WiFiMulti WiFiMulti;
 
-const String endPoint = "http://146.185.179.198/";
+const String endPoint = "http://146.185.179.198/api/";
 
 void setup() {
-    Serial.begin(115200);
+    TO_SERIAL.begin(2400);
+    TO_SERIAL.setTimeout(1000);
+
+    Serial.begin(2400);
     Serial.setTimeout(1000);
 
-    WiFiMulti.addAP("Conn", "hardcore57868266");
+    WiFiMulti.addAP("Emir", "emir123123");
     delay(1000);
 }
-
 
 void loop() {
     if((WiFiMulti.run() == WL_CONNECTED)) {
         
-        if (Serial.available()>0) {
-          String json = Serial.readStringUntil('\r\n');
+        if (TO_SERIAL.available()>0) {
+          String json = TO_SERIAL.readStringUntil('\r\n');
+          Serial.println(json);
           char charBuf[200];
           json.toCharArray(charBuf, 200);
           StaticJsonBuffer<200> jsonBuffer;
@@ -41,32 +48,50 @@ void loop() {
 
           if (!root.success())
           {
-            Serial.println("parseObject() failed");
+            TO_SERIAL.println("{\"error\":\"parseObject() failed\"}");
             return;
           }
 
           String doParam = root["do"];
-
-          if(doParam == "api/measurement") {
+         
+          if(doParam == "namebycard") {
             HTTPClient http;
-            //Serial.print("[HTTP] begin...\n");
-            http.begin(endPoint+"api/measurement"); //HTTP
-            http.addHeader("Content-Type", "application/json");
-            // start connection and send HTTP header
-            int httpCode = http.POST("{\"card_no\": \"123123\",\"value\": 99}");
+
+            String RFIDParam = root["RFID"];
+            
+            http.begin(endPoint+"namebycard?card_no="+RFIDParam);
+            int httpCode = http.GET();
     
-            // httpCode will be negative on error
             if(httpCode > 0) {
-                // HTTP header has been send and Server response header has been handled
-                // Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-    
-                // file found at server
                 if(httpCode == HTTP_CODE_OK) {
                     String payload = http.getString();
+                    TO_SERIAL.println(payload);
                     Serial.println(payload);
                 }
             } else {
-                // Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+                TO_SERIAL.printf("{\"error\": \"%s\"}\r\n", http.errorToString(httpCode).c_str());
+            }
+  
+             http.end();
+           } else if (doParam == "measurement") {
+            
+            HTTPClient http;
+
+            String RFIDParam = root["RFID"];
+            String valueParam = root["value"];
+            
+            http.begin(endPoint+"measurement");
+            http.addHeader("Content-Type", "application/json");
+            int httpCode = http.POST("{\"card_no\": \""+RFIDParam+"\",\"value\": "+valueParam+"}");
+    
+            if(httpCode > 0) {
+                if(httpCode == HTTP_CODE_OK) {
+                    String payload = http.getString();
+                    TO_SERIAL.println(payload);
+                    Serial.println(payload);
+                }
+            } else {
+                TO_SERIAL.printf("{\"error\": \"%s\"}\r\n", http.errorToString(httpCode).c_str());
             }
   
              http.end();
